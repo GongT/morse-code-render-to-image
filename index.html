@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>摩斯电码转图片</title>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      background: #f0f2f5;
+    }
+
+    /* ── Left panel ── */
+    #left-panel {
+      width: 300px;
+      min-width: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: #fff;
+      border-right: 1px solid #d9d9d9;
+      overflow-y: auto;
+    }
+
+    #left-panel h2 {
+      font-size: 1em;
+      color: #333;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+
+    .section label {
+      display: block;
+      font-size: 0.82em;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    textarea {
+      width: 100%;
+      font-family: monospace;
+      font-size: 0.88em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 6px 8px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+    textarea:focus { outline: none; border-color: #4a90e2; }
+    textarea[readonly] { background: #f8f8f8; color: #555; }
+
+    #input-text  { height: 110px; }
+    #morse-text  { height: 75px; }
+
+    .param-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .param-row .plabel {
+      flex: 1;
+      color: #444;
+      font-size: 0.87em;
+    }
+    .param-row input[type="number"] {
+      width: 62px;
+      padding: 3px 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .param-row input[type="number"]:focus { outline: none; border-color: #4a90e2; }
+    .param-row input[type="color"] {
+      width: 44px;
+      height: 26px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 1px;
+    }
+
+    /* ── Right panel ── */
+    #right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 20px;
+      overflow: auto;
+      gap: 14px;
+    }
+
+    #canvas-wrap {
+      /* checkerboard to show transparency */
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+        linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+        linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      overflow: hidden;
+      max-width: 100%;
+      line-height: 0;
+    }
+
+    #morse-canvas { display: block; }
+
+    #action-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 7px 18px;
+      background: #4a90e2;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.92em;
+      transition: background 0.15s;
+    }
+    button:hover  { background: #357abd; }
+    button:active { background: #2a6099; }
+
+    #status-msg {
+      font-size: 0.82em;
+      color: #4a90e2;
+      height: 18px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ LEFT PANEL ═══ -->
+<div id="left-panel">
+  <h2>摩斯电码转图片</h2>
+
+  <div class="section">
+    <label for="input-text">输入文本</label>
+    <textarea id="input-text" placeholder="在此输入文本，支持换行…"></textarea>
+  </div>
+
+  <div class="section">
+    <label>摩斯电码（只读）</label>
+    <textarea id="morse-text" readonly></textarea>
+  </div>
+
+  <div class="section">
+    <div class="param-list">
+
+      <div class="param-row">
+        <span class="plabel">笔画粗细 (px)</span>
+        <input type="number" id="stroke-width" value="4" min="1" max="50" step="1">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">划的长度（倍）</span>
+        <input type="number" id="dash-length" value="5" min="1" step="0.5">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">点间距（倍）</span>
+        <input type="number" id="dot-spacing" value="1" min="0" step="0.5">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">字间距（倍）</span>
+        <input type="number" id="char-spacing" value="2" min="0" step="0.5">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">空白长度（倍）</span>
+        <input type="number" id="blank-length" value="5" min="0" step="0.5">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">颜色</span>
+        <input type="color" id="color" value="#000000">
+      </div>
+
+      <div class="param-row">
+        <span class="plabel">边缘模糊 (px)</span>
+        <input type="number" id="blur" value="0" min="0" max="50" step="1">
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RIGHT PANEL ═══ -->
+<div id="right-panel">
+  <div id="canvas-wrap">
+    <canvas id="morse-canvas"></canvas>
+  </div>
+  <div id="action-buttons">
+    <button id="copy-btn">复制图片</button>
+    <button id="download-btn">下载图片</button>
+  </div>
+  <div id="status-msg"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// Morse code table  (dot = ".", dash = "_")
+// ─────────────────────────────────────────────
+const MORSE = {
+  A:'._',   B:'_...',  C:'_._.',  D:'_..',   E:'.',     F:'.._.',
+  G:'__.',  H:'....',  I:'..',    J:'.___',  K:'_._',   L:'._..',
+  M:'__',   N:'_.',    O:'___',   P:'.__.',  Q:'__._',  R:'._.',
+  S:'...',  T:'_',     U:'.._',   V:'..._',  W:'.__',   X:'_.._',
+  Y:'_.__', Z:'__..',
+  '0':'_____','1':'.____','2':'..___','3':'...__','4':'...._',
+  '5':'.....','6':'_....','7':'__...','8':'___..',  '9':'____.',
+  '.':'._._._', ',':'__..__', '?':'..__..', "'":'.____.',
+  '!':'_._.__', '/':'_.._.',  '(':    '_.__.',   ')':'_.__._',
+  '&':'._...', ':':'___...', ';':'_._._.', '=':'_..._',
+  '+':'._._.', '-':'_...._', '_':'..__._',  '"':'._.._.', '@':'.__._.',
+};
+
+// ─────────────────────────────────────────────
+// Text → Morse string
+// ─────────────────────────────────────────────
+function textToMorse(text) {
+  return text.split('\n').map(function(line) {
+    var words = line.split(' ');
+    var morseWords = words.map(function(word) {
+      var chars = word.toUpperCase().split('').map(function(ch) {
+        return MORSE[ch] || null;
+      }).filter(function(c) { return c !== null; });
+      return chars.join(' ');
+    }).filter(function(w) { return w.length > 0; });
+    return morseWords.join(' / ');
+  }).join('\n');
+}
+
+// ─────────────────────────────────────────────
+// Helper: filled rounded-rectangle (compatible)
+// ─────────────────────────────────────────────
+function fillRoundRect(ctx, x, y, w, h, r) {
+  if (w < 2 * r) r = w / 2;
+  if (h < 2 * r) r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ─────────────────────────────────────────────
+// Read render params from UI
+// ─────────────────────────────────────────────
+function parseNum(selector, defaultVal) {
+  var n = parseFloat($(selector).val());
+  return isNaN(n) ? defaultVal : n;
+}
+
+function getParams() {
+  return {
+    strokeWidth: Math.max(1, parseNum('#stroke-width', 4)),
+    dashLength:  Math.max(1, parseNum('#dash-length',  5)),
+    dotSpacing:  Math.max(0, parseNum('#dot-spacing',  1)),
+    charSpacing: Math.max(0, parseNum('#char-spacing', 2)),
+    blankLength: Math.max(0, parseNum('#blank-length', 5)),
+    color:       $('#color').val() || '#000000',
+    blur:        Math.max(0, parseNum('#blur', 0)),
+  };
+}
+
+// ─────────────────────────────────────────────
+// Render Morse text onto the canvas
+// ─────────────────────────────────────────────
+function renderMorse(morseText, params) {
+  var sw      = params.strokeWidth;
+  var dashW   = params.dashLength  * sw;   // width of a dash
+  var elemGap = params.dotSpacing  * sw;   // gap between symbols within char
+  var charGap = params.charSpacing * sw;   // gap between characters
+  var wordGap = params.blankLength * sw;   // gap for word separator '/'
+  var blur    = params.blur;
+  var color   = params.color;
+
+  // vertical metrics
+  var lineH   = sw;              // height of a symbol (dot diameter = dash height)
+  var linePad = sw * 3;          // vertical gap between lines
+  var margin  = sw * 2 + blur * 3; // extra margin: ~3σ Gaussian spread for blur
+
+  var lines = morseText.split('\n');
+
+  // Parse each line into an array of tokens
+  var parsedLines = lines.map(function(line) {
+    return line.split(' ').filter(function(t) { return t.length > 0; });
+  });
+
+  // Calculate pixel width of one line of tokens
+  function lineWidth(tokens) {
+    var w = 0;
+    for (var ti = 0; ti < tokens.length; ti++) {
+      var t = tokens[ti];
+      if (t === '/') {
+        w += wordGap;
+      } else {
+        if (ti > 0 && tokens[ti - 1] !== '/') w += charGap;
+        for (var si = 0; si < t.length; si++) {
+          if (si > 0) w += elemGap;
+          w += (t[si] === '.') ? sw : dashW;
+        }
+      }
+    }
+    return w;
+  }
+
+  var maxW = parsedLines.reduce(function(mx, toks) {
+    return Math.max(mx, lineWidth(toks));
+  }, 0);
+
+  var canvasW = Math.ceil(maxW   + margin * 2);
+  var canvasH = Math.ceil(
+    lines.length * (lineH + linePad) - linePad + margin * 2
+  );
+
+  var canvas = document.getElementById('morse-canvas');
+  canvas.width  = Math.max(canvasW, 1);
+  canvas.height = Math.max(canvasH, 1);
+
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = color;
+
+  if (blur > 0) {
+    ctx.filter = 'blur(' + blur + 'px)';
+  } else {
+    ctx.filter = 'none';
+  }
+
+  for (var li = 0; li < parsedLines.length; li++) {
+    var tokens = parsedLines[li];
+    var x  = margin;
+    var cy = margin + li * (lineH + linePad) + lineH / 2; // vertical centre
+
+    for (var ti = 0; ti < tokens.length; ti++) {
+      var t = tokens[ti];
+      if (t === '/') {
+        x += wordGap;
+      } else {
+        if (ti > 0 && tokens[ti - 1] !== '/') x += charGap;
+        for (var si = 0; si < t.length; si++) {
+          if (si > 0) x += elemGap;
+          if (t[si] === '.') {
+            // dot: filled circle
+            ctx.beginPath();
+            ctx.arc(x + sw / 2, cy, sw / 2, 0, Math.PI * 2);
+            ctx.fill();
+            x += sw;
+          } else if (t[si] === '_') {
+            // dash: filled rounded rectangle
+            fillRoundRect(ctx, x, cy - lineH / 2, dashW, lineH, lineH / 2);
+            x += dashW;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Scale the display canvas to fit the viewport ──
+  var rightPanel = document.getElementById('right-panel');
+  var availW = rightPanel.clientWidth  - 42; // 42 = padding + border
+  var availH = rightPanel.clientHeight - 90; // 90 ≈ buttons + gap
+  availW = Math.max(availW, 50);
+  availH = Math.max(availH, 50);
+
+  var scale = Math.min(1, availW / canvas.width, availH / canvas.height);
+  canvas.style.width  = Math.max(1, Math.floor(canvas.width  * scale)) + 'px';
+  canvas.style.height = Math.max(1, Math.floor(canvas.height * scale)) + 'px';
+}
+
+// ─────────────────────────────────────────────
+// URL state: text → hash, params → querystring
+// ─────────────────────────────────────────────
+function updateURL(text, params) {
+  var qs = new URLSearchParams({
+    sw: params.strokeWidth,
+    dl: params.dashLength,
+    ds: params.dotSpacing,
+    cs: params.charSpacing,
+    bl: params.blankLength,
+    c:  params.color.replace('#', ''),
+    b:  params.blur,
+  }).toString();
+  var hash = '#' + encodeURIComponent(text);
+  history.replaceState(null, '', '?' + qs + hash);
+}
+
+function loadFromURL() {
+  var hash = window.location.hash.slice(1);
+  if (hash) {
+    $('#input-text').val(decodeURIComponent(hash));
+  }
+  var p = new URLSearchParams(window.location.search);
+  if (p.get('sw')) $('#stroke-width').val(p.get('sw'));
+  if (p.get('dl')) $('#dash-length').val(p.get('dl'));
+  if (p.get('ds')) $('#dot-spacing').val(p.get('ds'));
+  if (p.get('cs')) $('#char-spacing').val(p.get('cs'));
+  if (p.get('bl')) $('#blank-length').val(p.get('bl'));
+  if (p.get('c'))  $('#color').val('#' + p.get('c'));
+  if (p.get('b'))  $('#blur').val(p.get('b'));
+}
+
+// ─────────────────────────────────────────────
+// Status message helper
+// ─────────────────────────────────────────────
+function showStatus(msg, isError) {
+  var $s = $('#status-msg');
+  $s.css('color', isError ? '#e05252' : '#4a90e2').text(msg).stop(true, true).show();
+  setTimeout(function() { $s.fadeOut(400); }, 2500);
+}
+
+// ─────────────────────────────────────────────
+// Main update cycle
+// ─────────────────────────────────────────────
+function update() {
+  var text  = $('#input-text').val();
+  var morse = textToMorse(text);
+  $('#morse-text').val(morse);
+  var params = getParams();
+  renderMorse(morse, params);
+  updateURL(text, params);
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+$(function() {
+  loadFromURL();
+
+  $('#input-text, #stroke-width, #dash-length, #dot-spacing, #char-spacing, #blank-length, #color, #blur')
+    .on('input change', update);
+
+  // Copy to clipboard as transparent PNG
+  $('#copy-btn').on('click', function() {
+    var canvas = document.getElementById('morse-canvas');
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      showStatus('浏览器不支持剪贴板图片写入', true);
+      return;
+    }
+    canvas.toBlob(function(blob) {
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+        .then(function()  { showStatus('已复制到剪贴板'); })
+        .catch(function(e) { showStatus('复制失败：' + e.message, true); });
+    }, 'image/png');
+  });
+
+  // Download as transparent PNG
+  $('#download-btn').on('click', function() {
+    var canvas = document.getElementById('morse-canvas');
+    var a = document.createElement('a');
+    a.download = 'morse.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+
+  update();
+});
+</script>
+</body>
+</html>
